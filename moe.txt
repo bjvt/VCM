@@ -1,0 +1,45 @@
+extract the date:
+
+extract the year and day number from the vcm
+awk '/MESSAGE TIME/{print $5, $6}' *.vcm
+awk '/MESSAGE TIME/{print $5, $6; next}; /SATELLITE/ {print $4}' *.vcm
+awk '{ ORS=" " }/MESSAGE TIME/{print $5, $6}; /SATELLITE/ {print $4; printf "\n"}; {ORS="\n"}' 51*.vcm
+
+      year           day           NORAD_ID          days       
+ Min.   :2020   Min.   :  2.0   Min.   :   11   Min.   :   2.0  
+ 1st Qu.:2022   1st Qu.:269.0   1st Qu.:25309   1st Qu.: 269.0  
+ Median :2022   Median :270.0   Median :38024   Median : 270.0  
+ Mean   :2022   Mean   :265.8   Mean   :36616   Mean   : 274.3  
+ 3rd Qu.:2022   3rd Qu.:271.0   3rd Qu.:47112   3rd Qu.: 271.0  
+ Max.   :2022   Max.   :366.0   Max.   :82998   Max.   :1096.0
+ 
+ agi DC note
+ https://help.agi.com/stk/index.htm#gator/eq-diffcorr.htm
+ https://nasa.fandom.com/wiki/Orbital_elements#Orbit_prediction
+ https://pwg.gsfc.nasa.gov/stargaze/Sgloss.htm
+ https://help.agi.com/AGIComponentsJava/Javadoc/agi-foundation-coordinates-EquinoctialElements.html
+ 
+ this is the VCM COV AWK, this is the lower half of the symetrical 3D COV
+ COVARIANCE MATRIX......
+ 1 2 3 4 5
+ 6 7 8 9
+ 
+awk '{ ORS=" " }/COVARIANCE MATRIX/{next; print $1}; {ORS="\n"}' 51*.vcm
+
+Extract VECTOR U,V,W SIGMAS from VCM
+
+awk '{ ORS=" " }/SATELLITE/{print $4}; /VECTOR U,V,W SIGMAS/{print $6, $7, $8; printf "\n"}; {ORS="\n"}' *.vcm
+
+include ECI coordinates, X, Y, Z, in KM, Satellite number (it will show up first), then Sigma X, Sigma Y, Sigma Z in KM
+
+
+awk '{ ORS=" " }/ECI POS/{print $5, $6, $7};/SATELLITE/{print $4}; /VECTOR U,V,W SIGMAS/{print $6, $7, $8; printf "\n"}; {ORS="\n"}' 51*.vcm
+
+awk '{ ORS=" " }/ECI POS/{print $5, $6, $7};/SATELLITE/{print $4}; /VECTOR U,V,W SIGMAS/{print $6, $7, $8; printf "\n"}; {ORS="\n"}' *.vcm > uvw.csv
+
+combine the message time
+
+awk '{ ORS=" " }/SATELLITE/{print $4};/MESSAGE TIME/{print $5, $6};/ECI POS/{print $5, $6, $7}; /VECTOR U,V,W SIGMAS/{print $6, $7, $8; printf "\n"}; {ORS="\n"}' *.vcm > data.out.csv
+
+# 3 Mar 23 - renamed the output file
+awk '{ ORS=" " }/SATELLITE/{print $4};/MESSAGE TIME/{print $5, $6};/ECI POS/{print $5, $6, $7}; /VECTOR U,V,W SIGMAS/{print $6, $7, $8; printf "\n"}; {ORS="\n"}' *.vcm > vcm_awk.csv

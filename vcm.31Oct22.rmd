@@ -1,0 +1,311 @@
+---
+title: "VCM Data Exploration"
+author: "Barry von Tobel"
+date: "11/21/2022"
+output: 
+  html_document:
+  toc: true
+toc_float: true
+toc_collapsed: true
+number_sections: true
+toc_depth: 3
+theme: tufte::tufte_html
+editor_options: 
+  chunk_output_type: console
+  markdown: 
+    wrap: 72
+---
+
+**Objective:**
+
+Explore different metrics that can be used in gauging the quality of the
+space catalog.
+
+**Discussion:**
+
+There are many ways to understand a system's behavior using statistical
+analysis of the generated output data. This exercise looks at the
+variances and aging of the individual Resident Space Objects (RSOs)
+derived from its latest state vector and positional variance.
+
+Data is extracted from a set of the approximately 28,000 files Vector
+Covariance Messages (VCM) that are currently published by
+space-track.org three times a day. The downloaded VCM data is then
+unzipped to a folder where the \~28K files are extracted.
+
+AWK, a Linux program, is then used to extract the necessary values from
+each VCM which is then saved to a space-delimited (not comma) file as
+shown in the table below. the "Year, Day, SATNO, X, Y, Z, SD_X, SD_Y,
+SD_Z" are the values extracted while "VAR_U, VAR_V, VAR_W, Days, VOL_SD,
+VOL_VAR, Height" are calculated. SD signifies Standard Deviation
+(labeled as SIGMA in the VCM), VAR is for the variance calculated which
+is assumed to be the squares of the SD.
+
+The VCMs' extracted and calculated values are saved as a data frame in
+the Statistics Package R, where the analysis occurred. the Table
+entitled "Extracted VCM Data" shows the first few rows of the data
+frame.
+
+```{r initial, message=TRUE, warning=FALSE, include=FALSE}
+library(lubridate)
+library(rgl)
+library(ggplot2)
+library(knitr)
+library(fBasics)
+library(tidyverse)
+
+# set your working directory
+setwd("/home/bvt/Dropbox/eng_science/R/wd/VCM/test1")
+# if glxinfo is not installed in your system, then install it first by executing the following command on a Terminal: sudo apt install mesa-utils
+knitr::opts_knit$set(root.dir = "/home/bvt/Dropbox/eng_science/R/wd/VCM/test1")
+
+#aging on VCM from:
+#<https://planspace.org/2013/02/03/pca-3d-visualization-and-clustering-in-r/>pca3d
+
+```
+
+\`
+
+```{r volume, echo=FALSE, warning=FALSE, results='asis'}
+# volume of the covariance
+# https://app.datacamp.com/workspace/w/f3c1d8a0-3a44-4d7f-ab9a-53340441fcb6/edit?file=notebook.ipynb
+# https://www.rdocumentation.org/packages/cluster/versions/2.1.4/topics/volume.ellipsoid
+# this is the output of the awk script
+df_uvw1 <- read.csv("vcm_awk.csv", sep = " ", na.strings = "CENTER:")
+colnames(df_uvw1) <- c("Year", "Day","SATNO","X", "Y", "Z","SD_U", "SD_V", "SD_W", "tmp")
+#Caculate the Variances from the VCM's SIGMA
+df_uvw1$VAR_U <- (df_uvw1$SD_U)^2
+df_uvw1$VAR_V <- (df_uvw1$SD_V)^2
+df_uvw1$VAR_W <- (df_uvw1$SD_W)^2
+#Calculate the number of days since VCM creation
+df_uvw1$Days <- (2022 - df_uvw1$Year) * 365 + df_uvw1$Day
+# Calculate the ellipsoid volume for both SD and VAR
+df_uvw1$VOL_SD <- (4/3)*pi*df_uvw1$SD_U * df_uvw1$SD_V * df_uvw1$SD_W * 1000 * 1000 * 1000
+df_uvw1$VOL_VAR <- (4/3)*pi*df_uvw1$VAR_U * df_uvw1$VAR_V * df_uvw1$VAR_W * 1000 * 1000 * 1000
+# Calculate height of the RSO at this given EPOCH, assuming the average earth radius a 6368 Km
+df_uvw1$Height <- ((df_uvw1$X ^2 + df_uvw1$Y^2 + df_uvw1$Z^2)^0.5) - 6368
+# Select - not needed when we have xlim and ylim set in ggplot
+#df_uvw2 <- subset(df_uvw1, Height>500 & Height<600 & VOL_VAR < 1e9)
+cat("## Extracted VCM Data - Top of ~28,000 rows", '\n\n')
+kable(head(df_uvw1), digits = 2)
+cat('\n\n\n')
+df_uvw2 <- df_uvw1
+cat("==========================================================================================================")
+# #########  Volume
+cat('\n\n')
+cat("# Variance Volume",'\n\n\n')
+cat(" The Variance Volume is the volume of a 3D ellipsoid, that shows the uncertainty of the data that shows how varied the location can be withing hte ellipsoid.  the volume is caculated from the variance of the u,v,w state vector's SIGMA's, which is believed to be the standard deviation of the values.  The variance is the square of the SIGMA.  The smaller the value, then the tighter the variance.  The volume, in cubic meters, is then caculated - (4/3)*pi*VAR_U * VAR_V * VAR_W", "\n\n")
+cat("The smaller the volume, the tighter the Variance, therefor the better probabliy of its location is better.  Accompaning a graph is a table of summary statistics, a range of altitudes for this graph, and the graph's plotting limits.  Various heights can be analyzed, and a value such as the Mean can support a quality metric.", "\n\n")
+
+cat("#### Graph Limits; xlim = 0 - 100, ylim = 0 - 300", "\n\n")
+cat("#### Orbital Band; 600 < Height < 700 Kilometers", "\n\n")
+cat('\n\n\n')
+# Select
+df_uvw2 <- subset(df_uvw1, Height>600 & Height<700 & VOL_VAR < 1e9)
+# Create a table suitable for Rmarkdown
+kable(basicStats(df_uvw2$VOL_VAR), format = "html", digits = 2)
+#Plot the histogram
+cat('\n\n')
+ghist <- ggplot(df_uvw2, aes(x=VOL_VAR)) +
+  geom_histogram(binwidth = 1, color="green") +
+  labs(title="Histogram of Variance Volume per Orbital Band ",
+       x = "Ellipsoid Volume - M^3",
+       y = "Number of RSOs per Bin") +
+  xlim(0, 100) +
+  ylim(0, 120)
+ghist
+cat("==========================================================================================================")
+################ Height
+cat('\n\n\n')
+cat("# RSO Height","\n\n")
+cat("The Height is the altitude of the RSO assuming a circuar orbit who's period is at the epoch of the VCM.  This estimation is usually adequate for saying what orbital band the RSO is in.  The height is calculated by the absolute value of the state vector minus the average earth radius in Kilometers - ((X ^2 + Y^2 + Z^2)^0.5) - 6368", "\n\n\n")
+cat("#### xlim = 500-  600, ylim = 0 - 50", "\n\n")
+cat("#### Orbital Band; 600 < Height < 700 Kilometers", "\n\n")
+cat('\n\n')
+# Select
+df_uvw2 <- subset(df_uvw1, Height>600 & Height<700)
+kable(basicStats(df_uvw2$Height), format = "html", digits = 2)
+
+ghist <- ggplot(df_uvw2, aes(x=Height)) +
+  geom_histogram(binwidth = 1, color="green") +
+  labs(title="Altitude of Known RSOs",
+       x = "Altitude - KM - an average",
+       y = "Number of RSOs per Altitude Band") +
+  xlim(600, 700) +
+  ylim(0, 50)
+ghist
+cat("==========================================================================================================")
+################## Aging
+cat('\n\n')
+cat("# VCM Created Date",'\n\n')
+cat("The aging is simply the creation date of the VCM, labeled EPOCH TIME (UTC). and is caculated by (2022 - Year) * 365 + Day) ", "\n\n")
+cat("#### xlim = 1 - 300, ylim = 0 - 100", "\n\n")
+cat("#### Orbital Band; 600 < Height < 700 Kilometers", "\n\n")
+cat('\n\n\n')
+ghist <- ggplot(df_uvw2, aes(x=Days)) +
+  geom_histogram(binwidth = 1, color="green") +
+  labs(title="Histogram of Days Since Creation Date ",
+       x = "Aging in Days",
+       y = "Number of RSOs per Bin") +
+  xlim(1, 300) +
+  ylim(0, 100)
+ghist
+
+write.csv(df_uvw1, file = 'data.out.csv')
+
+# section on correlations
+
+df_pairs <- df_uvw1[c("Height", "VOL_VAR", "Days")]
+
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) {
+    usr <- par("usr")
+    on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    Cor <- abs(cor(x, y)) # Remove abs function if desired
+    txt <- paste0(prefix, format(c(Cor, 0.123456789), digits = digits)[1])
+    if(missing(cex.cor)) {
+        cex.cor <- 0.4 / strwidth(txt)
+    }
+    text(0.5, 0.5, txt,
+         cex = 1 + cex.cor * Cor) # Resize the text by level of correlation
+}
+
+pairs(df_pairs, upper.panel = panel.cor)
+```
+
+```{r volume.example, eval=FALSE, include=FALSE}
+# https://search.r-project.org/CRAN/refmans/gellipsoid/html/ellipsoid.html
+myEl <- structure(list(cov = rbind(c(3,1),1:2), loc = c(0,0), d2 = 10),
+                   class = "ellipsoid")
+cluster::volume(myEl)# i.e. "area" here (d = 2)
+myEl # also mentions the "volume"
+
+set.seed(1)
+d5 <- matrix(rt(500, df=3), 100,5)
+e5 <- ellipsoidhull(d5)
+
+```
+
+```{r ellipse, eval=FALSE, include=FALSE}
+# load dataset
+df.cov <- read.csv("OEM_spheres.csv")
+
+summary(df.cov)
+#plot3d(df.cov, col=rainbow(100000))
+cov.num <- cbind(df.cov$x, df.cov$y,df.cov$z)
+
+cov(cov.num)
+#plot3d(pc$scores[,1:3], col=iris$Species)
+ellipse3d(x, scale = c(1,1,1), centre = c(0,0,0), level = 0.95)
+
+#rgl_init()
+rgl.spheres(df.cov$x, df.cov$y, df.cov$z, r = 0.002, color = "#D95F02") 
+#rgl_add_axes(x, y, z, show.bbox = TRUE)
+# Compute and draw the ellipse of concentration
+# ellips <- ellipse3d(cov(cbind(x,y,z)), centre=c(mean(x), mean(y), mean(z)), level = 0.95)
+#shade3d(ellips, col = "#D95F02", alpha = 0.1, lit = FALSE)
+#aspect3d(1,1,1)
+
+tmp2 <- ellipse3d(cov.num)
+shade3d(tmp2, centre=c(mean(df.cov$x), mean(df.cov$y), mean(df.cov$z)), level = 0.95)
+tmp2 <- ellipse3d(cov.num)
+shade3d(tmp2,col = "blue", alpha = 0.1, lit = FALSE)
+
+ellips <- ellipse3d(cov(cbind(x,y,z)), 
+            centre=c(mean(x), mean(y), mean(z)), level = 0.95)
+shade3d(ellips, col = "#D95F02", alpha = 0.1, lit = FALSE)
+aspect3d(1,1,1)
+
+```
+
+```{r scratch, eval=FALSE, include=FALSE}
+mat.cov1 <- as.matrix(read.csv("cov.222861.csv"))
+
+
+
+
+elli <- ellipse3d(df.mat)
+
+shade3d(elli)
+wire3d(elli)
+
+```
+
+```{r scratch2, eval=FALSE, include=FALSE}
+# https://stackoverflow.com/questions/42766569/how-toelp-convert-ellipsoid-to-mesh3d-in-r
+library(rgl)
+
+library(cluster)
+open3d()
+
+ellipsoid3d <- function(cen, a = 1,b = 1,c = 1,n = 65, ...){
+  f <- function(s,t){ 
+    cbind(   a * cos(t)*cos(s) + cen[1],
+             b *        sin(s) + cen[2],
+             c * sin(t)*cos(s) + cen[3])
+  }
+  persp3d(f, slim = c(-pi/2,pi/2), tlim = c(0, 2*pi), n = n, add = T, ...)
+}
+
+set.seed(122)
+n <- 3
+for (i in 1:n){
+   cen <- 3*runif(3)
+   a <- runif(1)
+   b <- runif(1)
+   c <- runif(1)
+
+   clr <- c("red","blue","green")[i %% 3 + 1 ]
+   elpf <- ellipsoid3d(cen,a=a,b=b,c=c,col=clr,alpha=0.5)
+}
+
+elpf
+
+```
+
+```{r eval=FALSE, include=FALSE}
+r3dDefaults
+windowRect <- c(100, 100, 1000, 1000) 
+library(rgl)
+# also need to install webroot2 and chromate, 
+remotes::install_github("rstudio/chromote")
+# Plot a random sample and an ellipsoid of concentration corresponding to a 95%
+# probability region for a \# trivariate normal distribution with mean
+#0, unit variances and \# correlation 0.8. if (requireNamespace("MASS"))
+ #Sigma \<- matrix(c(10, 3, 0, 3, 2, 0, 0, 0, 1), 3, 3) 
+cov.22286 <- as.matrix(read.csv("cov.22286.1.csv")) #
+cov.28358 <- as.matrix(read.csv("cov.28358.1.csv"))
+
+Mean <- 1:3 
+x1 <- MASS::mvrnorm(100, Mean, cov.22286) 
+x2 <- MASS::mvrnorm(100, Mean + 0.4, cov.28358) 
+x3 <- MASS::mvrnorm(100,
+Mean - 0.4, cov.28358)
+
+cen <- 2*runif(2) 
+open3d()
+#plot3d(x1, box = FALSE, add=TRUE)
+#plot3d(x2, box = FALSE, add=TRUE) 
+plot3d(x3, box = FALSE, add=TRUE)
+
+#plot3d( ellipse3d(cov.22286, centre = Mean), col = "green", alpha = 0.2, add = TRUE) 
+#plot3d( ellipse3d(cov.28358, centre = Mean +.4), col = "red", alpha = 0.2, add = TRUE) 
+plot3d( ellipse3d(cov.28358, centre = Mean -.4), col = "blue", alpha = 0.2, add = TRUE)
+
+#wire3d(ellipse3d(cov.22286, centre = Mean ), col = "black", alpha = 0.2, add = TRUE)
+#wire3d(ellipse3d(cov.28358, centre = Mean +.4), col = "black", alpha = 0.2, add = TRUE)
+wire3d(ellipse3d(cov.28358, centre = Mean -.4), col = "black", alpha = 0.2, add = TRUE)
+
+aspect3d(1,1,1)
+
+ # suitable - movie3d(spin3d(axis = c(0,0,1), rpm = 4), duration = 15, fps = 10, convert = TRUE, clean = FALSE)
+#movie3d(spin3d(axis = c(0,0,1), rpm = 5), duration = 10, fps = 5, convert = TRUE, clean = FALSE)
+
+# Create a movie
+  
+movie3d(spin3d(axis = c(0, 0, 1)), duration = 7,dir = "/home/bvt/Dropbox/tmp", clean = FALSE)
+  
+#planes3d(ellipse3d(cov.28358, centre = Mean +.4), col = "black", alpha = 0.2, add = TRUE)
+#clipplanes3d(ellipse3d(cov.28358, centre = Mean +.4), col = "black", alpha = 0.2, add = TRUE))
+
+```
