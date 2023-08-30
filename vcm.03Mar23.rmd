@@ -3,9 +3,10 @@ title: "VCM Data Exploration"
 author: "Barry von Tobel"
 date: "03/03/2022"
 output:
-  html_document: null
-  toc: yes
   pdf_document: default
+  toc: yes
+  word_document: default
+  html_document: null
 toc_float: yes
 toc_collapsed: yes
 number_sections: yes
@@ -56,9 +57,9 @@ library(fBasics)
 library(tidyverse)
 
 # set your working directory
-setwd("/home/bvt/Dropbox/eng_science/R/wd/VCM/test1")
+setwd("/home/bvt/Dropbox/eng_science/R/wd/VCM/output/test1")
 # if glxinfo is not installed in your system, then install it first by executing the following command on a Terminal: sudo apt install mesa-utils
-knitr::opts_knit$set(root.dir = "/home/bvt/Dropbox/eng_science/R/wd/VCM/test1")
+knitr::opts_knit$set(root.dir = "/home/bvt/Dropbox/eng_science/R/wd/VCM/output/test1")
 
 #aging on VCM from:
 #<https://planspace.org/2013/02/03/pca-3d-visualization-and-clustering-in-r/>pca3d
@@ -264,7 +265,7 @@ elpf
 
 ```
 
-```{r eval=FALSE, include=FALSE}
+```{r movie.1, eval=FALSE, include=FALSE}
 r3dDefaults
 windowRect <- c(100, 100, 1000, 1000) 
 library(rgl)
